@@ -1,0 +1,187 @@
+module sokoban;
+
+//TODO
+// - commit to github!
+// - more levels
+// - read level from file
+// - split in several modules: sokologic, sokoui, sokomain and guiconsole
+// - count moves (-> score)
+// - read levels collections and ramp levels up
+// - undo
+// Read a sokoban level
+//======================
+readLineSymbols symbol x y result line =
+	if x == strLength line then
+		result 
+	elif strChar line x == symbol then
+		readLineSymbols symbol (x+1) y ({x, y} :: result) line
+	else
+		readLineSymbols symbol (x+1) y result line
+	fi;
+readAllSymbols' symbol y result lines =
+	if empty? lines then
+		result
+	else
+		result = readLineSymbols symbol 0 y result (head lines);
+		readAllSymbols' symbol (y+1) result (tail lines)
+	fi;
+readAllSymbols symbols lines = 
+	symbols |> map (_ symbol = readAllSymbols' symbol 0 [] lines) |> fold (++) [];
+
+readBoard lines =
+	{
+		// 2 following lists never vary during one level play
+		walls = readAllSymbols ["#"] lines,
+		goals = readAllSymbols [".", "*", "+"] lines,
+		// 2 following lists can vary during one level play (box move)
+		boxes = readAllSymbols ["$", "*"] lines,
+		floor = readAllSymbols [" ", "@", ".", "+"] lines,
+		// Following field varies during one level play (player move)
+		player = readAllSymbols ["@", "+"] lines |> head
+	};
+
+// Moving logic
+//==============
+moveSymbol oldPos newPos symbols =
+	newPos :: (filter (!= oldPos) symbols);
+
+update {walls, goals, boxes, floor, player} move =
+	(p = player;
+	 p1 = move p;
+	 p2 = move p1;
+	 if contains? p1 floor then
+		 {walls, goals, boxes, floor, player = p1}
+	 elif contains? p1 boxes and contains? p2 floor then
+		 {walls, goals, boxes = moveSymbol p1 p2 boxes, floor = moveSymbol p2 p1 floor, player = p1}
+	 else
+		 {walls, goals, boxes, floor, player}
+	 fi);
+
+cmp p1 p2 = if p1.y != p2.y then p1.y < p2.y else p1.x < p2.x fi;
+won? {goals, boxes} = (sortBy cmp goals) == (sortBy cmp boxes);
+
+up {x,y} = {x, y = y - 1};
+down {x,y} = {x, y = y + 1};
+left {x,y} = {x = x - 1, y};
+right {x,y} = {x = x + 1, y};
+
+// User Interface
+//================
+
+load guiconsole;
+
+import java.awt.event.KeyEvent;
+import javax.swing.JOptionPane;
+
+moves = [
+	KeyEvent#VK_UP:		up,
+	KeyEvent#VK_DOWN:	down,
+	KeyEvent#VK_LEFT:	left,
+	KeyEvent#VK_RIGHT:	right,
+	];
+setHashDefault moves \id;
+
+size f {walls, goals, boxes, floor} =
+	(walls ++ goals ++ boxes ++ floor) |> map f |> fold max 0 |> (+1);
+width = size (.x);
+height = size (.y);
+
+convertSymbol {walls, goals, boxes, player} pos =
+	if contains? pos walls then "#"
+	elif contains? pos boxes then
+		if contains? pos goals then "*" else "$" fi
+	elif contains? pos goals then
+		if pos == player then "+" else "." fi
+	elif pos == player then "@"
+	else " " fi;
+
+convert board =
+	(w = width board - 1;
+	 h = height board - 1;
+	 addsym {x, y} = {x, y, sym = convertSymbol board {x, y}};
+	 [0..h]	|> map (_ y = [0..w]
+	 		|> map (_ x = {x, y}))
+	 		|> map (map addsym)
+	 		|> map (fold (_ a b = a ^ b.sym) ""));
+
+show game con = convert game |> con.print;
+
+eventLoop game con =
+	if won? game then
+		JOptionPane#showMessageDialog((),"You win!");
+		()
+	else
+		key = con.getch ();
+		if key != KeyEvent#VK_ESCAPE then
+			move = moves.[key];
+			if move != id then
+				game = update game move;
+				show game con;
+				eventLoop game con;
+			else
+				eventLoop game con;
+			fi
+		fi
+	fi;
+
+icons = [
+	"#" : "wall.gif",
+	" " : "floor.gif",
+	"@" : "player.gif",
+	"+" : "player.gif",
+	"." : "goal.gif",
+	"$" : "box.gif",
+	"*" : "boxOnGoal.gif"];
+	
+game input =
+	(game = readBoard input;
+	 sokoban = console (width game) (height game) icons;
+	 sokoban.title "Sokoban";
+	 show game sokoban;
+	 eventLoop game sokoban;
+	 sokoban.close ());
+
+//TEST
+// Used to check simple moves, no win possible
+maze1 =
+	[	"#####",
+		"# . #",
+		"# @ #",
+		"#   #",
+		"#####" ];
+
+// real (difficult) maze
+maze2 =
+	[	"   ####",
+		"####  ##",
+		"#   $  #",
+		"#  *** #",
+		"#  . . ##",
+		"## * *  #",
+		" ##***  #",
+		"  # $ ###",
+		"  # @ #",
+		"  #####" ];
+
+// The following mazes are from Takaken (http://www.ic-net.or.jp/home/takaken/e/soko/level/index.html)
+maze3 =
+	[	" #####",
+		" # @ ###",
+		"## #$  #",
+		"# *. . #",
+		"#  $$ ##",
+		"### #.#",
+		"  #   #",
+		"  #####" ];
+// Title: scrambled egg
+
+maze4 =
+	[	"#####",
+		"#   #####",
+		"# # #   #",
+		"# $   $ #",
+		"#..#$#$##",
+		"#.@$   #",
+		"#..  ###",
+		"######" ];
+// Title: a point

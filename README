@@ -1,0 +1,15 @@
+This repository contains an implementation of the famous Sokoban game, written in Yeti.
+
+This implementation was written only as an exercise to get acquainted with Yeti programming.
+Please beware that some of the files here may be subject to copyright (in particular icons and levels).
+
+To launch the game from Yeti REPL, type:
+
+> load sokoban
+> game maze1
+
+A Window appears with a sokoban level. You can use arrow keys to play, and ESC to quit the game.
+Current version is very limited, but future versions may include the following features:
+- load sokoban level files (.slc)
+- display level and moves count
+- undo moves
