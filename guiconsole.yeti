@@ -70,6 +70,7 @@ console width height mapIcons is number -> number -> hash<string, string> -> t_c
 	 frame#add(pane);
 	 frame#setDefaultCloseOperation(JFrame#DISPOSE_ON_CLOSE);
 	 frame#pack();
+	 frame#setLocationRelativeTo(() as ~Component);
 	 frame#setVisible(true);
 	 {
 		 title t = frame#setTitle(t),

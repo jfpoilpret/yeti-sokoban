@@ -1,15 +1,22 @@
 module sokoban;
 
 //TODO
-// - commit to github!
-// - more levels
-// - read level from file
-// - split in several modules: sokologic, sokoui, sokomain and guiconsole
-// - count moves (-> score)
-// - read levels collections and ramp levels up
-// - undo
-// Read a sokoban level
-//======================
+// 1h	- ramp levels up after one level is won
+
+// 30'	- improve guiconsole so that X box ends the game...
+// 2h	- improve guiconsole module (messagebox functions, generic dialog functions)
+// 2h	- ask which level to play from the list
+
+// 1h	- undo
+// 1h	- save/restore game
+// 1h	- split in several modules: sokologic, sokoui, sokomain and guiconsole
+// 1h	- UI to read a level collection file
+// 1h	- show slc info (header copyright) after download (in messagebox)
+// 1h	- count moves (-> score)
+
+// Read sokoban levels
+//=====================
+
 readLineSymbols symbol x y result line =
 	if x == strLength line then
 		result 
@@ -28,8 +35,10 @@ readAllSymbols' symbol y result lines =
 readAllSymbols symbols lines = 
 	symbols |> map (_ symbol = readAllSymbols' symbol 0 [] lines) |> fold (++) [];
 
+// Read one level in a list of lines
 readBoard lines =
 	{
+		title = "no name",
 		// 2 following lists never vary during one level play
 		walls = readAllSymbols ["#"] lines,
 		goals = readAllSymbols [".", "*", "+"] lines,
@@ -39,6 +48,26 @@ readBoard lines =
 		// Following field varies during one level play (player move)
 		player = readAllSymbols ["@", "+"] lines |> head
 	};
+
+firstLevelLine = find (_ l = strIndexOf l "#" 0 != -1);
+splitLevelLines lines levels is list?<string> -> list<list<string>> -> list<list<string>> =
+	({fst, snd} = splitBy (_ l = strLength (strTrim l) == 0) lines;
+	 lines = firstLevelLine snd;
+	 if empty? lines then levels else splitLevelLines lines (levels ++ [fst]) fi);
+splitLevels lines is list?<string> -> list<list<string>> =
+	splitLevelLines (firstLevelLine lines) [];
+buildLevel lines =
+	(matcher = filter (_ l = strIndexOf l ";" 0 != -1) lines |> head |> strTrim |> like "^;(.*)$";
+	 matches = matcher ();
+	 title = if not empty? matches then strTrim (matches.[1]) else "" fi;
+	 readBoard (filter (_ l = strIndexOf l "#" 0 != -1) lines) with {title});
+
+// Read all levels from a list of lines
+readLevels lines =
+	splitLevels lines |> map buildLevel;
+
+// Read all levels from a file (text SLC format)
+readFileLines file = (openInFile file "UTF-8").lines ();
 
 // Moving logic
 //==============
@@ -108,7 +137,7 @@ show game con = convert game |> con.print;
 
 eventLoop game con =
 	if won? game then
-		JOptionPane#showMessageDialog((),"You win!");
+		JOptionPane#showMessageDialog((),"Bravo, quel exploit!");
 		()
 	else
 		key = con.getch ();
@@ -132,14 +161,16 @@ icons = [
 	"." : "goal.gif",
 	"$" : "box.gif",
 	"*" : "boxOnGoal.gif"];
-	
-game input =
-	(game = readBoard input;
-	 sokoban = console (width game) (height game) icons;
-	 sokoban.title "Sokoban";
-	 show game sokoban;
-	 eventLoop game sokoban;
-	 sokoban.close ());
+
+game level =
+	(ui = console (width level) (height level) icons;
+	 ui.title "Sokoban";
+	 show level ui;
+	 eventLoop level ui;
+	 ui.close ());
+
+sokoban input =
+	readFileLines input |> readLevels |> head |> game;
 
 //TEST
 // Used to check simple moves, no win possible
@@ -185,3 +216,25 @@ maze4 =
 		"#..  ###",
 		"######" ];
 // Title: a point
+
+maze5 =
+	[	"####################",
+		"#@$.#.$           .#",
+		"## ###$######## # ##",
+		" # #.$ # .... #   ##",
+		" # #   # $$$$ ###$##",
+		" # # #.#       .# ##",
+		" # # ###      $## ##",
+		" # # ##       $.# ##",
+		" # # #. #     $## ##",
+		" # # #$ #      .#  #",
+		" # # # #  ######## #",
+		" # # # .# #    #.$ #",
+		" # # # $#   #  #.$ #",
+		" # # #  ##$# $##.$ #",
+		" # # $ .#.    .#.$ #",
+		" # ############### #",
+		" #$  $ $        .. #",
+		" #.#               #",
+		" ###################" ];
+
