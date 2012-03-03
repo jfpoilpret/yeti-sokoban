@@ -1,7 +1,6 @@
 module sokoban;
 
 //TODO
-// 30'	- skip a level ("s")
 // 1h	- count levels / moves (-> score)
 // 30'	- show details about scores: levels played / skipped with number of moves (and pushes?)
 
@@ -147,6 +146,8 @@ eventLoop ui level moves =
 		 key = ui.getch ();
 		 if key == KeyEvent#VK_ESCAPE then
 			 Quit ()
+		 elif key == KeyEvent#VK_S then
+			 Skip ()
 		 elif key == KeyEvent#VK_R then
 			 Restart ()
 		 elif key == KeyEvent#VK_Z then
@@ -175,6 +176,7 @@ play ui levels moves =
 	 level = map (.move) moves |> reverse |> replay level;
 	 case eventLoop ui level moves of
 		 Won (): play ui (tail levels) [];
+		 Skip (): play ui (tail levels) [];
 		 Restart (): play ui levels [];
 		 Undo ms: play ui levels ms;
 		 Quit (): ();
