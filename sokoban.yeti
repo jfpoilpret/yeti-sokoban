@@ -1,8 +1,6 @@
 module sokoban;
 
 //TODO
-// 1h	- undo
-
 // 1h	- count moves (-> score)
 
 // 2h	- improve guiconsole module (generic dialog functions)
@@ -130,15 +128,15 @@ show ui level = convert level |> ui.print;
 import java.awt.event.KeyEvent;
 
 //TODO refactor to have a map of key -> function
-moves = [
+keyMoves = [
 	KeyEvent#VK_UP:		up,
 	KeyEvent#VK_DOWN:	down,
 	KeyEvent#VK_LEFT:	left,
 	KeyEvent#VK_RIGHT:	right,
 	];
-setHashDefault moves \id;
+setHashDefault keyMoves \id;
 
-eventLoop ui level =
+eventLoop ui level moves =
 	(show ui level;
 	 if won? level then
 		 ui.infoBox "Bravo, quel exploit!";
@@ -149,20 +147,30 @@ eventLoop ui level =
 			 Quit ()
 		 elif key == KeyEvent#VK_R then
 			 Restart ()
+		 elif key == KeyEvent#VK_Z then
+			 Undo (drop 1 moves)
 		 else
-			 move = moves.[key];
-			 eventLoop ui (if move != id then update level move else level fi)
+			 move = keyMoves.[key];
+			 if move != id then
+				 eventLoop ui (update level move) (move :: moves)
+			 else
+				 eventLoop ui level moves
+			 fi
 		 fi
 	 fi);
-	 
-play ui levels = 
+
+replay level moves =
+	if empty? moves then level else replay (update level (head moves)) (tail moves) fi;
+play ui levels moves = 
 	(level = head levels;
 	 ui.title level.title;
 	 ui.size (width level) (height level);
 	 ui.clear ();
-	 case eventLoop ui level of
-		 Won (): play ui (tail levels);
-		 Restart (): play ui levels;
+	 level = replay level (reverse moves);
+	 case eventLoop ui level moves of
+		 Won (): play ui (tail levels) [];
+		 Restart (): play ui levels [];
+		 Undo mm: play ui levels mm;
 		 Quit (): ();
 	 esac);
 
@@ -181,5 +189,5 @@ sokoban input =
 	 ui = console 40 25 icons;
 	 ui.title "Sokoban";
 	 ui.infoBox notice;
-	 play ui levels;
+	 play ui levels [];
 	 ui.close ());

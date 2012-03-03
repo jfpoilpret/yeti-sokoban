@@ -43,7 +43,8 @@ class Pane(int w, int h, Map icons) extends JPanel
 		dim = new Dimension(w * width, h * height);
 		this#setMinimumSize(dim);
 		this#setPreferredSize(dim);
-		this#setMaximumSize(dim),
+		this#setMaximumSize(dim);
+		this#invalidate(),
 	void printContent(AList newContent)
 		content := if nullptr? newContent then [""] else newContent unsafely_as list<string> fi;
 		this#repaint(),
