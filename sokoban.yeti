@@ -1,18 +1,17 @@
 module sokoban;
 
 //TODO
-// 1h	- ramp levels up after one level is won
-
-// 30'	- improve guiconsole so that X box ends the game...
-// 2h	- improve guiconsole module (messagebox functions, generic dialog functions)
-// 2h	- ask which level to play from the list
-
 // 1h	- undo
-// 1h	- save/restore game
-// 1h	- split in several modules: sokologic, sokoui, sokomain and guiconsole
-// 1h	- UI to read a level collection file
-// 1h	- show slc info (header copyright) after download (in messagebox)
+
 // 1h	- count moves (-> score)
+
+// 2h	- improve guiconsole module (generic dialog functions)
+// 2h	- ask which level to play from the list
+// 1h	- save/restore game
+
+// 1h	- split in several modules: sokologic, sokoui, sokomain and guiconsole
+
+// 1h	- UI to read a level collection file
 
 // Read sokoban levels
 //=====================
@@ -49,6 +48,10 @@ readBoard lines =
 		player = readAllSymbols ["@", "+"] lines |> head
 	};
 
+extractNotice lines = 
+	splitBy (_ l = strIndexOf l "#" 0 != -1) lines |> (.fst)
+		|> map (_ l = (m = like "^;(.*)$" (strTrim l);m' = m (); (if empty? m' then "" else m'.[1] fi) ^ "\n"))
+		|> fold (^) "";
 firstLevelLine = find (_ l = strIndexOf l "#" 0 != -1);
 splitLevelLines lines levels is list?<string> -> list<list<string>> -> list<list<string>> =
 	({fst, snd} = splitBy (_ l = strLength (strTrim l) == 0) lines;
@@ -59,12 +62,12 @@ splitLevels lines is list?<string> -> list<list<string>> =
 buildLevel lines =
 	(matcher = filter (_ l = strIndexOf l ";" 0 != -1) lines |> head |> strTrim |> like "^;(.*)$";
 	 matches = matcher ();
-	 title = if not empty? matches then strTrim (matches.[1]) else "" fi;
+	 title = if not empty? matches then strTrim (matches.[1]) else "no name" fi;
 	 readBoard (filter (_ l = strIndexOf l "#" 0 != -1) lines) with {title});
 
 // Read all levels from a list of lines
 readLevels lines =
-	splitLevels lines |> map buildLevel;
+	{notice = extractNotice lines, levels = splitLevels lines |> map buildLevel};
 
 // Read all levels from a file (text SLC format)
 readFileLines file = (openInFile file "UTF-8").lines ();
@@ -74,16 +77,16 @@ readFileLines file = (openInFile file "UTF-8").lines ();
 moveSymbol oldPos newPos symbols =
 	newPos :: (filter (!= oldPos) symbols);
 
-update {walls, goals, boxes, floor, player} move =
+update {title, walls, goals, boxes, floor, player} move =
 	(p = player;
 	 p1 = move p;
 	 p2 = move p1;
 	 if contains? p1 floor then
-		 {walls, goals, boxes, floor, player = p1}
+		 {title, walls, goals, boxes, floor, player = p1}
 	 elif contains? p1 boxes and contains? p2 floor then
-		 {walls, goals, boxes = moveSymbol p1 p2 boxes, floor = moveSymbol p2 p1 floor, player = p1}
+		 {title, walls, goals, boxes = moveSymbol p1 p2 boxes, floor = moveSymbol p2 p1 floor, player = p1}
 	 else
-		 {walls, goals, boxes, floor, player}
+		 {title, walls, goals, boxes, floor, player}
 	 fi);
 
 cmp p1 p2 = if p1.y != p2.y then p1.y < p2.y else p1.x < p2.x fi;
@@ -98,17 +101,6 @@ right {x,y} = {x = x + 1, y};
 //================
 
 load guiconsole;
-
-import java.awt.event.KeyEvent;
-import javax.swing.JOptionPane;
-
-moves = [
-	KeyEvent#VK_UP:		up,
-	KeyEvent#VK_DOWN:	down,
-	KeyEvent#VK_LEFT:	left,
-	KeyEvent#VK_RIGHT:	right,
-	];
-setHashDefault moves \id;
 
 size f {walls, goals, boxes, floor} =
 	(walls ++ goals ++ boxes ++ floor) |> map f |> fold max 0 |> (+1);
@@ -133,25 +125,46 @@ convert board =
 	 		|> map (map addsym)
 	 		|> map (fold (_ a b = a ^ b.sym) ""));
 
-show game con = convert game |> con.print;
+show ui level = convert level |> ui.print;
 
-eventLoop game con =
-	if won? game then
-		JOptionPane#showMessageDialog((),"Bravo, quel exploit!");
-		()
-	else
-		key = con.getch ();
-		if key != KeyEvent#VK_ESCAPE then
-			move = moves.[key];
-			if move != id then
-				game = update game move;
-				show game con;
-				eventLoop game con;
-			else
-				eventLoop game con;
-			fi
-		fi
-	fi;
+import java.awt.event.KeyEvent;
+
+//TODO refactor to have a map of key -> function
+moves = [
+	KeyEvent#VK_UP:		up,
+	KeyEvent#VK_DOWN:	down,
+	KeyEvent#VK_LEFT:	left,
+	KeyEvent#VK_RIGHT:	right,
+	];
+setHashDefault moves \id;
+
+eventLoop ui level =
+	(show ui level;
+	 if won? level then
+		 ui.infoBox "Bravo, quel exploit!";
+		 Won ();
+	 else
+		 key = ui.getch ();
+		 if key == KeyEvent#VK_ESCAPE then
+			 Quit ()
+		 elif key == KeyEvent#VK_R then
+			 Restart ()
+		 else
+			 move = moves.[key];
+			 eventLoop ui (if move != id then update level move else level fi)
+		 fi
+	 fi);
+	 
+play ui levels = 
+	(level = head levels;
+	 ui.title level.title;
+	 ui.size (width level) (height level);
+	 ui.clear ();
+	 case eventLoop ui level of
+		 Won (): play ui (tail levels);
+		 Restart (): play ui levels;
+		 Quit (): ();
+	 esac);
 
 icons = [
 	"#" : "wall.gif",
@@ -162,79 +175,11 @@ icons = [
 	"$" : "box.gif",
 	"*" : "boxOnGoal.gif"];
 
-game level =
-	(ui = console (width level) (height level) icons;
-	 ui.title "Sokoban";
-	 show level ui;
-	 eventLoop level ui;
-	 ui.close ());
-
+// Main entry point of the game
 sokoban input =
-	readFileLines input |> readLevels |> head |> game;
-
-//TEST
-// Used to check simple moves, no win possible
-maze1 =
-	[	"#####",
-		"# . #",
-		"# @ #",
-		"#   #",
-		"#####" ];
-
-// real (difficult) maze
-maze2 =
-	[	"   ####",
-		"####  ##",
-		"#   $  #",
-		"#  *** #",
-		"#  . . ##",
-		"## * *  #",
-		" ##***  #",
-		"  # $ ###",
-		"  # @ #",
-		"  #####" ];
-
-// The following mazes are from Takaken (http://www.ic-net.or.jp/home/takaken/e/soko/level/index.html)
-maze3 =
-	[	" #####",
-		" # @ ###",
-		"## #$  #",
-		"# *. . #",
-		"#  $$ ##",
-		"### #.#",
-		"  #   #",
-		"  #####" ];
-// Title: scrambled egg
-
-maze4 =
-	[	"#####",
-		"#   #####",
-		"# # #   #",
-		"# $   $ #",
-		"#..#$#$##",
-		"#.@$   #",
-		"#..  ###",
-		"######" ];
-// Title: a point
-
-maze5 =
-	[	"####################",
-		"#@$.#.$           .#",
-		"## ###$######## # ##",
-		" # #.$ # .... #   ##",
-		" # #   # $$$$ ###$##",
-		" # # #.#       .# ##",
-		" # # ###      $## ##",
-		" # # ##       $.# ##",
-		" # # #. #     $## ##",
-		" # # #$ #      .#  #",
-		" # # # #  ######## #",
-		" # # # .# #    #.$ #",
-		" # # # $#   #  #.$ #",
-		" # # #  ##$# $##.$ #",
-		" # # $ .#.    .#.$ #",
-		" # ############### #",
-		" #$  $ $        .. #",
-		" #.#               #",
-		" ###################" ];
-
+	({notice, levels} = readFileLines input |> readLevels;
+	 ui = console 40 25 icons;
+	 ui.title "Sokoban";
+	 ui.infoBox notice;
+	 play ui levels;
+	 ui.close ());
