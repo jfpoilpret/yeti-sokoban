@@ -6,10 +6,14 @@ Please beware that some of the files here may be subject to copyright (in partic
 To launch the game from Yeti REPL, type:
 
 > load sokoban
-> game maze1
+> sokoban "Learning_Sokoban.slc"
 
 A Window appears with a sokoban level. You can use arrow keys to play, and ESC to quit the game.
-Current version is very limited, but future versions may include the following features:
-- load sokoban level files (.slc)
+You can also undo your last move (and previous ones if you need) by typing "z".
+You can restart from a level from the start by typing "r".
+
+Sorry for french messages, this game is for my daughter!
+
+I will possibly add a few features soon:
 - display level and moves count
-- undo moves
+- better UI to load an SLC file
