@@ -1,7 +1,9 @@
 module sokoban;
 
 //TODO
-// 1h	- count moves (-> score)
+// 30'	- skip a level ("s")
+// 1h	- count levels / moves (-> score)
+// 30'	- show details about scores: levels played / skipped with number of moves (and pushes?)
 
 // 2h	- improve guiconsole module (generic dialog functions)
 // 2h	- ask which level to play from the list
@@ -148,11 +150,13 @@ eventLoop ui level moves =
 		 elif key == KeyEvent#VK_R then
 			 Restart ()
 		 elif key == KeyEvent#VK_Z then
-			 Undo (drop 1 moves)
+			 Undo moves
 		 else
 			 move = keyMoves.[key];
 			 if move != id then
-				 eventLoop ui (update level move) (move :: moves)
+				 level' = update level move;
+				 move' = {move, box = level.boxes != level'.boxes};
+				 eventLoop ui level' (move'::moves)
 			 else
 				 eventLoop ui level moves
 			 fi
@@ -161,27 +165,29 @@ eventLoop ui level moves =
 
 replay level moves =
 	if empty? moves then level else replay (update level (head moves)) (tail moves) fi;
+undo moves = find (.box) moves |> tail;
 play ui levels moves = 
 	(level = head levels;
 	 ui.title level.title;
 	 ui.size (width level) (height level);
 	 ui.clear ();
-	 level = replay level (reverse moves);
+	 moves = undo moves;
+	 level = map (.move) moves |> reverse |> replay level;
 	 case eventLoop ui level moves of
 		 Won (): play ui (tail levels) [];
 		 Restart (): play ui levels [];
-		 Undo mm: play ui levels mm;
+		 Undo ms: play ui levels ms;
 		 Quit (): ();
 	 esac);
 
 icons = [
-	"#" : "wall.gif",
-	" " : "floor.gif",
-	"@" : "player.gif",
-	"+" : "player.gif",
-	"." : "goal.gif",
-	"$" : "box.gif",
-	"*" : "boxOnGoal.gif"];
+	"#": "wall.gif",
+	" ": "floor.gif",
+	"@": "player.gif",
+	"+": "player.gif",
+	".": "goal.gif",
+	"$": "box.gif",
+	"*": "boxOnGoal.gif"];
 
 // Main entry point of the game
 sokoban input =
