@@ -1,0 +1,46 @@
+module sokologic;
+
+moveSymbol oldPos newPos symbols =
+	newPos :: (filter (!= oldPos) symbols);
+
+update {title, walls, goals, boxes, floor, player} move =
+	(p = player;
+	 p1 = move p;
+	 p2 = move p1;
+	 if contains? p1 floor then
+		 {title, walls, goals, boxes, floor, player = p1}
+	 elif contains? p1 boxes and contains? p2 floor then
+		 {title, walls, goals, boxes = moveSymbol p1 p2 boxes, floor = moveSymbol p2 p1 floor, player = p1}
+	 else
+		 {title, walls, goals, boxes, floor, player}
+	 fi);
+
+update' level move moves =
+	if move != id then
+		level' = update level move;
+		if level.player != level'.player then
+			move' = {move, box = level.boxes != level'.boxes};
+			{level = level', moves = (move'::moves)}
+		else
+			{level = level', moves}
+		fi
+	else
+		{level, moves}
+	fi;
+
+cmp p1 p2 = if p1.y != p2.y then p1.y < p2.y else p1.x < p2.x fi;
+won? {goals, boxes} = (sortBy cmp goals) == (sortBy cmp boxes);
+
+up {x,y} = {x, y = y - 1};
+down {x,y} = {x, y = y + 1};
+left {x,y} = {x = x - 1, y};
+right {x,y} = {x = x + 1, y};
+
+score level moves =
+	{level = level.title, moves = length moves, pushes = length (filter (.box) moves)};
+
+replay level moves =
+	if empty? moves then level else replay (update level (head moves)) (tail moves) fi;
+undo moves = find (.box) moves |> tail;
+
+{update', won?, up, down, left, right, score, replay, undo}

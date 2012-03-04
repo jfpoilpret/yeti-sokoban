@@ -1,8 +1,6 @@
 module sokoban;
 
 //TODO
-// 30'	- don't account for moves that do nothing (player doesn't move) in score
-
 // 1h	- save/restore game, score, player
 
 // 30'	- how to handle level score when Undo is used?
@@ -15,122 +13,9 @@ module sokoban;
 // 1h	- split in several modules: sokologic, sokoui, sokomain and guiconsole
 // 1h	- UI to read a level collection file
 
-// Read sokoban levels
-//=====================
-
-readLineSymbols symbol x y result line =
-	if x == strLength line then
-		result 
-	elif strChar line x == symbol then
-		readLineSymbols symbol (x+1) y ({x, y} :: result) line
-	else
-		readLineSymbols symbol (x+1) y result line
-	fi;
-readAllSymbols' symbol y result lines =
-	if empty? lines then
-		result
-	else
-		result = readLineSymbols symbol 0 y result (head lines);
-		readAllSymbols' symbol (y+1) result (tail lines)
-	fi;
-readAllSymbols symbols lines = 
-	symbols |> map (_ symbol = readAllSymbols' symbol 0 [] lines) |> fold (++) [];
-
-// Read one level in a list of lines
-readBoard lines =
-	{
-		title = "no name",
-		// 2 following lists never vary during one level play
-		walls = readAllSymbols ["#"] lines,
-		goals = readAllSymbols [".", "*", "+"] lines,
-		// 2 following lists can vary during one level play (box move)
-		boxes = readAllSymbols ["$", "*"] lines,
-		floor = readAllSymbols [" ", "@", ".", "+"] lines,
-		// Following field varies during one level play (player move)
-		player = readAllSymbols ["@", "+"] lines |> head
-	};
-
-extractNotice lines = 
-	splitBy (_ l = strIndexOf l "#" 0 != -1) lines |> (.fst)
-		|> map (_ l = (m = like "^;(.*)$" (strTrim l);m' = m (); (if empty? m' then "" else m'.[1] fi) ^ "\n"))
-		|> fold (^) "";
-firstLevelLine = find (_ l = strIndexOf l "#" 0 != -1);
-splitLevelLines lines levels is list?<string> -> list<list<string>> -> list<list<string>> =
-	({fst, snd} = splitBy (_ l = strLength (strTrim l) == 0) lines;
-	 lines = firstLevelLine snd;
-	 if empty? lines then levels else splitLevelLines lines (levels ++ [fst]) fi);
-splitLevels lines is list?<string> -> list<list<string>> =
-	splitLevelLines (firstLevelLine lines) [];
-buildLevel lines =
-	(matcher = filter (_ l = strIndexOf l ";" 0 != -1) lines |> head |> strTrim |> like "^;(.*)$";
-	 matches = matcher ();
-	 title = if not empty? matches then strTrim (matches.[1]) else "no name" fi;
-	 readBoard (filter (_ l = strIndexOf l "#" 0 != -1) lines) with {title});
-
-// Read all levels from a list of lines
-readLevels lines =
-	{notice = extractNotice lines, levels = splitLevels lines |> map buildLevel};
-
-// Read all levels from a file (text SLC format)
-readFileLines file = (openInFile file "UTF-8").lines ();
-
-// Moving logic
-//==============
-moveSymbol oldPos newPos symbols =
-	newPos :: (filter (!= oldPos) symbols);
-
-update {title, walls, goals, boxes, floor, player} move =
-	(p = player;
-	 p1 = move p;
-	 p2 = move p1;
-	 if contains? p1 floor then
-		 {title, walls, goals, boxes, floor, player = p1}
-	 elif contains? p1 boxes and contains? p2 floor then
-		 {title, walls, goals, boxes = moveSymbol p1 p2 boxes, floor = moveSymbol p2 p1 floor, player = p1}
-	 else
-		 {title, walls, goals, boxes, floor, player}
-	 fi);
-
-cmp p1 p2 = if p1.y != p2.y then p1.y < p2.y else p1.x < p2.x fi;
-won? {goals, boxes} = (sortBy cmp goals) == (sortBy cmp boxes);
-
-up {x,y} = {x, y = y - 1};
-down {x,y} = {x, y = y + 1};
-left {x,y} = {x = x - 1, y};
-right {x,y} = {x = x + 1, y};
-
-// User Interface
-//================
-
+load sokoio;
+load sokologic;
 load guiconsole;
-
-size f {walls, goals, boxes, floor} =
-	(walls ++ goals ++ boxes ++ floor) |> map f |> fold max 0 |> (+1);
-width = size (.x);
-height = size (.y);
-
-convertSymbol {walls, goals, boxes, player} pos =
-	if contains? pos walls then "#"
-	elif contains? pos boxes then
-		if contains? pos goals then "*" else "$" fi
-	elif contains? pos goals then
-		if pos == player then "+" else "." fi
-	elif pos == player then "@"
-	else " " fi;
-
-convert board =
-	(w = width board - 1;
-	 h = height board - 1;
-	 addsym {x, y} = {x, y, sym = convertSymbol board {x, y}};
-	 [0..h]	|> map (_ y = [0..w]
-	 		|> map (_ x = {x, y}))
-	 		|> map (map addsym)
-	 		|> map (fold (_ a b = a ^ b.sym) ""));
-
-score level moves =
-	{level = level.title, moves = length moves, pushes = length (filter (.box) moves)};
-
-show ui level = convert level |> ui.print;
 
 import java.awt.event.KeyEvent;
 
@@ -146,42 +31,21 @@ setHashDefault keyMoves \id;
 title {level, moves, pushes} = 
 	"Sokoban - level `\(level)` - \(moves) moves, \(pushes) pushes";
 	
-eventLoop ui level moves =
-	(show ui level;
-	 ui.title (title (score level moves));
+eventLoop ui {level, moves} =
+	(convert level |> ui.print;
+	 score = score level moves;
+	 score |> title |> ui.title;
 	 if won? level then
-		 score = score level moves;
-		 ui.infoBox "Bravo! Niveau `\(score.level)` terminé en \(score.moves) mouvements, dont \(score.pushes) poussés.";
+		 ui.infoBox "Bravo! Niveau `\(score.level)` fini en \(score.moves) mouvements, dont \(score.pushes) poussees.";
 		 Won score;
 	 else
 		 key = ui.getch ();
-		 if key == KeyEvent#VK_ESCAPE then
-			 Quit ()
-		 elif key == KeyEvent#VK_S then
-			 Skip ()
-		 elif key == KeyEvent#VK_R then
-			 Restart ()
-		 elif key == KeyEvent#VK_Z then
-			 Undo moves
-		 else
-			 move = keyMoves.[key];
-			 if move != id then
-				 level' = update level move;
-				 if level.player != level'.player then
-					 move' = {move, box = level.boxes != level'.boxes};
-					 eventLoop ui level' (move'::moves)
-				 else
-					 eventLoop ui level' moves
-				 fi
-			 else
-				 eventLoop ui level moves
-			 fi
-		 fi
+		 if key == KeyEvent#VK_ESCAPE then Quit ()
+		 elif key == KeyEvent#VK_S then Skip ()
+		 elif key == KeyEvent#VK_R then Restart ()
+		 elif key == KeyEvent#VK_Z then Undo moves
+		 else eventLoop ui (update' level keyMoves.[key] moves) fi
 	 fi);
-
-replay level moves =
-	if empty? moves then level else replay (update level (head moves)) (tail moves) fi;
-undo moves = find (.box) moves |> tail;
 
 play ui levels moves scores = 
 	if empty? levels then
@@ -193,7 +57,7 @@ play ui levels moves scores =
 		ui.clear ();
 		moves = undo moves;
 		level = map (.move) moves |> reverse |> replay level;
-		case eventLoop ui level moves of
+		case eventLoop ui {level, moves} of
 			Won score: play ui (tail levels) [] ((Won score)::scores);
 			Skip (): play ui (tail levels) [] scores;
 			Restart (): play ui levels [] scores;
@@ -214,7 +78,7 @@ icons = [
 score2string score = case score of 
 	Won {level, moves, pushes}:  "Niveau `\(level)`: \(moves) M. \(pushes) P.\n"; _: "" esac;
 total scores = 
-	reverse scores	|> map score2string |> fold (^) "";
+	if empty? score then "" else reverse scores |> map score2string |> fold (^) "" fi;
 	
 // Main entry point of the game
 sokoban input =

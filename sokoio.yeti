@@ -1,0 +1,83 @@
+module sokoio;
+
+readLineSymbols symbol x y result line =
+	if x == strLength line then
+		result 
+	elif strChar line x == symbol then
+		readLineSymbols symbol (x+1) y ({x, y} :: result) line
+	else
+		readLineSymbols symbol (x+1) y result line
+	fi;
+readAllSymbols' symbol y result lines =
+	if empty? lines then
+		result
+	else
+		result = readLineSymbols symbol 0 y result (head lines);
+		readAllSymbols' symbol (y+1) result (tail lines)
+	fi;
+readAllSymbols symbols lines = 
+	symbols |> map (_ symbol = readAllSymbols' symbol 0 [] lines) |> fold (++) [];
+
+// Read one level in a list of lines
+readBoard lines =
+	{
+		title = "no name",
+		// 2 following lists never vary during one level play
+		walls = readAllSymbols ["#"] lines,
+		goals = readAllSymbols [".", "*", "+"] lines,
+		// 2 following lists can vary during one level play (box move)
+		boxes = readAllSymbols ["$", "*"] lines,
+		floor = readAllSymbols [" ", "@", ".", "+"] lines,
+		// Following field varies during one level play (player move)
+		player = readAllSymbols ["@", "+"] lines |> head
+	};
+
+extractNotice lines = 
+	splitBy (_ l = strIndexOf l "#" 0 != -1) lines |> (.fst)
+		|> map (_ l = (m = like "^;(.*)$" (strTrim l);m' = m (); (if empty? m' then "" else m'.[1] fi) ^ "\n"))
+		|> fold (^) "";
+firstLevelLine = find (_ l = strIndexOf l "#" 0 != -1);
+splitLevelLines lines levels is list?<string> -> list<list<string>> -> list<list<string>> =
+	({fst, snd} = splitBy (_ l = strLength (strTrim l) == 0) lines;
+	 lines = firstLevelLine snd;
+	 if empty? lines then levels else splitLevelLines lines (levels ++ [fst]) fi);
+splitLevels lines is list?<string> -> list<list<string>> =
+	splitLevelLines (firstLevelLine lines) [];
+buildLevel lines =
+	(matcher = filter (_ l = strIndexOf l ";" 0 != -1) lines |> head |> strTrim |> like "^;(.*)$";
+	 matches = matcher ();
+	 title = if not empty? matches then strTrim (matches.[1]) else "no name" fi;
+	 readBoard (filter (_ l = strIndexOf l "#" 0 != -1) lines) with {title});
+
+// Read all levels from a list of lines
+readLevels lines =
+	{notice = extractNotice lines, levels = splitLevels lines |> map buildLevel};
+
+// Read all levels from a file (text SLC format)
+readFileLines file = (openInFile file "UTF-8").lines ();
+
+
+size f {walls, goals, boxes, floor} =
+	(walls ++ goals ++ boxes ++ floor) |> map f |> fold max 0 |> (+1);
+width = size (.x);
+height = size (.y);
+
+convertSymbol {walls, goals, boxes, player} pos =
+	if contains? pos walls then "#"
+	elif contains? pos boxes then
+		if contains? pos goals then "*" else "$" fi
+	elif contains? pos goals then
+		if pos == player then "+" else "." fi
+	elif pos == player then "@"
+	else " " fi;
+
+convert board =
+	(w = width board - 1;
+	 h = height board - 1;
+	 addsym {x, y} = {x, y, sym = convertSymbol board {x, y}};
+	 [0..h]	|> map (_ y = [0..w]
+	 		|> map (_ x = {x, y}))
+	 		|> map (map addsym)
+	 		|> map (fold (_ a b = a ^ b.sym) ""));
+
+{readFileLines, readLevels, width, height, convert}
