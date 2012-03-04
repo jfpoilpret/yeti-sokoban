@@ -67,7 +67,8 @@ typedef t_console =
 
 loadIcon name is string -> ~ImageIcon = new ImageIcon(name);
 
-//TODO improve to allow change of size
+//FIXME problem with accented characters in input strings of message box?
+//TODO allow fix size and fill in with space icon
 console width height mapIcons is number -> number -> hash<string, string> -> t_console =
 	(icons is hash<string, ~ImageIcon> = [:];
 	 forHash mapIcons (_ k v = (icons.[k] := loadIcon v));

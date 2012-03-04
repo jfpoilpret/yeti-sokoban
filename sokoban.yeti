@@ -1,15 +1,18 @@
 module sokoban;
 
 //TODO
-// 1h	- count levels / moves (-> score)
-// 30'	- show details about scores: levels played / skipped with number of moves (and pushes?)
+// 30'	- don't account for moves that do nothing (player doesn't move) in score
 
+// 1h	- save/restore game, score, player
+
+// 30'	- how to handle level score when Undo is used?
+// 30'	- better details about scores at the end: levels skipped?
+
+// 1h	- save/restore game
 // 2h	- improve guiconsole module (generic dialog functions)
 // 2h	- ask which level to play from the list
-// 1h	- save/restore game
 
 // 1h	- split in several modules: sokologic, sokoui, sokomain and guiconsole
-
 // 1h	- UI to read a level collection file
 
 // Read sokoban levels
@@ -124,6 +127,9 @@ convert board =
 	 		|> map (map addsym)
 	 		|> map (fold (_ a b = a ^ b.sym) ""));
 
+score level moves =
+	{level = level.title, moves = length moves, pushes = length (filter (.box) moves)};
+
 show ui level = convert level |> ui.print;
 
 import java.awt.event.KeyEvent;
@@ -137,11 +143,16 @@ keyMoves = [
 	];
 setHashDefault keyMoves \id;
 
+title {level, moves, pushes} = 
+	"Sokoban - level `\(level)` - \(moves) moves, \(pushes) pushes";
+	
 eventLoop ui level moves =
 	(show ui level;
+	 ui.title (title (score level moves));
 	 if won? level then
-		 ui.infoBox "Bravo, quel exploit!";
-		 Won ();
+		 score = score level moves;
+		 ui.infoBox "Bravo! Niveau `\(score.level)` terminé en \(score.moves) mouvements, dont \(score.pushes) poussés.";
+		 Won score;
 	 else
 		 key = ui.getch ();
 		 if key == KeyEvent#VK_ESCAPE then
@@ -156,8 +167,12 @@ eventLoop ui level moves =
 			 move = keyMoves.[key];
 			 if move != id then
 				 level' = update level move;
-				 move' = {move, box = level.boxes != level'.boxes};
-				 eventLoop ui level' (move'::moves)
+				 if level.player != level'.player then
+					 move' = {move, box = level.boxes != level'.boxes};
+					 eventLoop ui level' (move'::moves)
+				 else
+					 eventLoop ui level' moves
+				 fi
 			 else
 				 eventLoop ui level moves
 			 fi
@@ -167,20 +182,25 @@ eventLoop ui level moves =
 replay level moves =
 	if empty? moves then level else replay (update level (head moves)) (tail moves) fi;
 undo moves = find (.box) moves |> tail;
-play ui levels moves = 
-	(level = head levels;
-	 ui.title level.title;
-	 ui.size (width level) (height level);
-	 ui.clear ();
-	 moves = undo moves;
-	 level = map (.move) moves |> reverse |> replay level;
-	 case eventLoop ui level moves of
-		 Won (): play ui (tail levels) [];
-		 Skip (): play ui (tail levels) [];
-		 Restart (): play ui levels [];
-		 Undo ms: play ui levels ms;
-		 Quit (): ();
-	 esac);
+
+play ui levels moves scores = 
+	if empty? levels then
+		scores
+	else
+		level = head levels;
+		ui.title level.title;
+		ui.size (width level) (height level);
+		ui.clear ();
+		moves = undo moves;
+		level = map (.move) moves |> reverse |> replay level;
+		case eventLoop ui level moves of
+			Won score: play ui (tail levels) [] ((Won score)::scores);
+			Skip (): play ui (tail levels) [] scores;
+			Restart (): play ui levels [] scores;
+			Undo ms: play ui levels ms scores;
+			Quit (): scores;
+		esac
+	fi;
 
 icons = [
 	"#": "wall.gif",
@@ -191,11 +211,17 @@ icons = [
 	"$": "box.gif",
 	"*": "boxOnGoal.gif"];
 
+score2string score = case score of 
+	Won {level, moves, pushes}:  "Niveau `\(level)`: \(moves) M. \(pushes) P.\n"; _: "" esac;
+total scores = 
+	reverse scores	|> map score2string |> fold (^) "";
+	
 // Main entry point of the game
 sokoban input =
 	({notice, levels} = readFileLines input |> readLevels;
 	 ui = console 40 25 icons;
 	 ui.title "Sokoban";
 	 ui.infoBox notice;
-	 play ui levels [];
+	 scores = play ui levels [] [];
+	 ui.infoBox (total scores);
 	 ui.close ());
