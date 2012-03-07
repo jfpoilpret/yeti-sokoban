@@ -1,5 +1,7 @@
 module sokoio;
 
+// Read levels from SLC files
+//----------------------------
 readLineSymbols symbol x y result line =
 	if x == strLength line then
 		result 
@@ -53,10 +55,8 @@ buildLevel lines =
 readLevels lines =
 	{notice = extractNotice lines, levels = splitLevels lines |> map buildLevel};
 
-// Read all levels from a file (text SLC format)
-readFileLines file = (openInFile file "UTF-8").lines ();
-
-
+// Conversion of levels to strings, prior to display
+//---------------------------------------------------
 size f {walls, goals, boxes, floor} =
 	(walls ++ goals ++ boxes ++ floor) |> map f |> fold max 0 |> (+1);
 width = size (.x);
@@ -80,4 +80,25 @@ convert board =
 	 		|> map (map addsym)
 	 		|> map (fold (_ a b = a ^ b.sym) ""));
 
-{readFileLines, readLevels, width, height, convert}
+// Handling of users file
+//------------------------
+
+userRegexp = like "\"([^\"]+)\":([^:]+):\"([^\"]+)\":([udlr]+)";
+
+readUser groups =
+	{user = groups.[1], file = groups.[2], level = groups.[3], moves = groups.[4]};
+
+readUsers lines =
+	lines |> map (_ l = userRegexp l ()) |> filter (_ l = not empty? l) |> map readUser;
+
+writeUser {user, file, level, moves} = '"\(user)":\(file):"\(level)":\(moves)\n';
+
+writeUsers users = map writeUser users;
+
+// General IO
+//------------
+readFileLines file = (openInFile file "UTF-8").lines ();
+writeFileLines file lines = 
+	withHandle (openOutFile file "UTF-8") (_ h = for lines h.writeln);
+
+{readFileLines, writeFileLines, readLevels, width, height, convert, readUsers}

@@ -1,16 +1,23 @@
 module sokoban;
 
 //TODO
-// 1h	- save/restore game, score, player
+// 2h	- save/restore game, score, player
+// 2h	- compute best scores per level (least pushes, then least moves)
+/*
+	users (sokoban.usr)
+		"user":lastfile:"lastlevel":moves
+		"user":lastfile:"lastlevel":moves
+
+	scores (per slc): (levels.scr)
+		"level":"user":pushes:moves
+		"level":"user":pushes:moves
+*/
 
 // 30'	- how to handle level score when Undo is used?
 // 30'	- better details about scores at the end: levels skipped?
 
-// 1h	- save/restore game
 // 2h	- improve guiconsole module (generic dialog functions)
 // 2h	- ask which level to play from the list
-
-// 1h	- split in several modules: sokologic, sokoui, sokomain and guiconsole
 // 1h	- UI to read a level collection file
 
 load sokoio;
@@ -36,7 +43,7 @@ eventLoop ui {level, moves} =
 	 score = score level moves;
 	 score |> title |> ui.title;
 	 if won? level then
-		 ui.infoBox "Bravo! Niveau `\(score.level)` fini en \(score.moves) mouvements, dont \(score.pushes) poussees.";
+		 ui.infoBox "Bravo! Niveau `\(score.level)` fini en \(score.moves) mouvements, dont \(score.pushes) poussées.";
 		 Won score;
 	 else
 		 key = ui.getch ();
@@ -78,11 +85,13 @@ icons = [
 score2string score = case score of 
 	Won {level, moves, pushes}:  "Niveau `\(level)`: \(moves) M. \(pushes) P.\n"; _: "" esac;
 total scores = 
-	if empty? score then "" else reverse scores |> map score2string |> fold (^) "" fi;
+	if empty? scores then "" else reverse scores |> map score2string |> fold (^) "" fi;
 	
 // Main entry point of the game
 sokoban input =
-	({notice, levels} = readFileLines input |> readLevels;
+	(users = readFileLines "sokoban.usr" |> readUsers;
+	 //TODO show list of users and ask for selection
+	 {notice, levels} = readFileLines input |> readLevels;
 	 ui = console 40 25 icons;
 	 ui.title "Sokoban";
 	 ui.infoBox notice;
