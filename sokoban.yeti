@@ -1,28 +1,24 @@
 module sokoban;
 
-//TODO
-// 2h	- save/restore game, score, player
-// 2h	- compute best scores per level (least pushes, then least moves)
-/*
-	users (sokoban.usr)
-		"user":lastfile:"lastlevel":moves
-		"user":lastfile:"lastlevel":moves
+// > java -cp designgridlayout-1.9.jar;yeti.jar yeti.lang.compiler.yeti
 
-	scores (per slc): (levels.scr)
-		"level":"user":pushes:moves
-		"level":"user":pushes:moves
-*/
+//TODO
+// 1h	- UI to read a level collection file
+// 2h	- ask which level to play from the list
+// 1h	- add function to show scores for current SLC
+
+// 2h	- record moves that lead to success (can be shown/saved on demand)
+// 1h	- save/restore player last move
 
 // 30'	- how to handle level score when Undo is used?
 // 30'	- better details about scores at the end: levels skipped?
 
-// 2h	- improve guiconsole module (generic dialog functions)
-// 2h	- ask which level to play from the list
-// 1h	- UI to read a level collection file
+// 2h	- refactor modules further
 
 load sokoio;
 load sokologic;
 load guiconsole;
+load dialog;
 
 import java.awt.event.KeyEvent;
 
@@ -37,24 +33,54 @@ setHashDefault keyMoves \id;
 
 title {level, moves, pushes} = 
 	"Sokoban - level `\(level)` - \(moves) moves, \(pushes) pushes";
+
+(better) sc1 sc2 =
+	sc1.pushes < sc2.pushes or (sc1.pushes == sc2.pushes and sc1.moves < sc2.moves);
+
+checkBestScore user input score =
+	(findScore = (== score.level) . (.level);
+	 current = readFileLines "\(input).scr" |> readScores;
+	 best = filter findScore current;
+	 others = filter ((not) . findScore) current;
+	 isbetter = if empty? best then true else score `better` (head best) fi;
+	 if isbetter then
+		 score' = {user, level = score.level, moves = score.moves, pushes = score.pushes};
+		 writeScores (score' :: others) |> writeFileLines "\(input).scr";
+	 fi;
+	 isbetter);
+
+help ui =
+	ui.infoBox """List of function keys:
+	F    Show Hall of Fame (NYI)
+	H    Help
+	L    Load new levels file (NYI)
+	R    Restart level
+	S    Skip level
+	Z    Undo last push
+	Esc  Quit game""";
 	
-eventLoop ui {level, moves} =
+eventLoop input user ui {level, moves} =
 	(convert level |> ui.print;
 	 score = score level moves;
 	 score |> title |> ui.title;
 	 if won? level then
-		 ui.infoBox "Bravo! Niveau `\(score.level)` fini en \(score.moves) mouvements, dont \(score.pushes) poussées.";
+		 if checkBestScore user input score then
+			 ui.infoBox "Congratulations! New record (`\(score.level)` level done in \(score.moves) moves, \(score.pushes) pushes.)";
+		 fi;
 		 Won score;
 	 else
 		 key = ui.getch ();
 		 if key == KeyEvent#VK_ESCAPE then Quit ()
+		 elif key == KeyEvent#VK_H then
+			 help ui;
+			 eventLoop input user ui {level, moves}
 		 elif key == KeyEvent#VK_S then Skip ()
 		 elif key == KeyEvent#VK_R then Restart ()
 		 elif key == KeyEvent#VK_Z then Undo moves
-		 else eventLoop ui (update' level keyMoves.[key] moves) fi
+		 else eventLoop input user ui (update' level keyMoves.[key] moves) fi
 	 fi);
 
-play ui levels moves scores = 
+play input user ui levels moves scores = 
 	if empty? levels then
 		scores
 	else
@@ -64,11 +90,11 @@ play ui levels moves scores =
 		ui.clear ();
 		moves = undo moves;
 		level = map (.move) moves |> reverse |> replay level;
-		case eventLoop ui {level, moves} of
-			Won score: play ui (tail levels) [] ((Won score)::scores);
-			Skip (): play ui (tail levels) [] scores;
-			Restart (): play ui levels [] scores;
-			Undo ms: play ui levels ms scores;
+		case eventLoop input user ui {level, moves} of
+			Won score: play input user ui (tail levels) [] (score::scores);
+			Skip (): play input user ui (tail levels) [] scores;
+			Restart (): play input user ui levels [] scores;
+			Undo ms: play input user ui levels ms scores;
 			Quit (): scores;
 		esac
 	fi;
@@ -82,19 +108,53 @@ icons = [
 	"$": "box.gif",
 	"*": "boxOnGoal.gif"];
 
-score2string score = case score of 
-	Won {level, moves, pushes}:  "Niveau `\(level)`: \(moves) M. \(pushes) P.\n"; _: "" esac;
-total scores = 
-	if empty? scores then "" else reverse scores |> map score2string |> fold (^) "" fi;
-	
-// Main entry point of the game
-sokoban input =
-	(users = readFileLines "sokoban.usr" |> readUsers;
-	 //TODO show list of users and ask for selection
-	 {notice, levels} = readFileLines input |> readLevels;
-	 ui = console 40 25 icons;
+score2string {level, moves, pushes} = 
+	"Niveau `\(level)`: \(moves) M. \(pushes) P.\n";
+
+newUser name = {user = name, file = "", level = "", moves = ""};
+selectUser users =
+	(newUsr = textfield "" [Columns 20];
+	 names = map (.user) users;
+	 select ii is list<number> -> () =
+		 newUsr#setText(if empty? ii then "" else (array names).[head ii] fi);
+	 usrList = scrollinglist [Values names, singleSelection, IndexSelection select];
+	 var selection = "New user";
+	 apply dlg = (selection := newUsr#getText();close dlg);
+	 dialog "Select User" [row "Known Users" usrList, row "New User" newUsr] apply;
+	 user = filter (on (==) (.user) (newUser selection)) users;
+	 if empty? user then newUser selection else head user fi);
+
+selectLevelsFile () =
+	maybe "" id (openbox "Select a Sokoban levels file" ["slc"]);
+		
+sokoplay input user {notice, levels} =
+	(ui = console 40 25 icons;
 	 ui.title "Sokoban";
 	 ui.infoBox notice;
-	 scores = play ui levels [] [];
-	 ui.infoBox (total scores);
-	 ui.close ());
+	 scores = play input user ui levels [] [];
+	 ui.close ();
+	 scores);
+
+nextLevel scores =
+	if empty? scores then "" else (head scores).level fi;
+
+// Main entry point of the game
+sokoban () =
+	(users = readFileLines "sokoban.usr" |> readUsers;
+	 user = selectUser users;
+	 input = if user.file == "" then selectLevelsFile () else user.file fi;
+	 if input != "" then
+		 {notice, levels} = readFileLines input |> readLevels;
+		 // skip levels until we find the right one
+		 levels' = find (_ {title} = title == user.level) levels;
+		 levels' = if empty? levels' then levels else tail levels' fi;
+		 levels = if empty? levels' then levels else levels' fi;
+		 // start to play
+		 scores = sokoplay input user.user {notice, levels};
+		 users = filter (on (!=) (.user) user) users;
+		 user = user with {file = input, level = nextLevel scores, moves = ""};
+		 users = user :: users;
+		 writeFileLines "sokoban.usr" (writeUsers users);
+	 else
+		 ()
+	 fi);

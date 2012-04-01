@@ -83,7 +83,7 @@ convert board =
 // Handling of users file
 //------------------------
 
-userRegexp = like "\"([^\"]+)\":([^:]+):\"([^\"]+)\":([udlr]+)";
+userRegexp = like "\"([^\"]+)\":\"([^\"]*)\":\"([^\"]*)\":\"([udlr]*)\"";
 
 readUser groups =
 	{user = groups.[1], file = groups.[2], level = groups.[3], moves = groups.[4]};
@@ -91,14 +91,51 @@ readUser groups =
 readUsers lines =
 	lines |> map (_ l = userRegexp l ()) |> filter (_ l = not empty? l) |> map readUser;
 
-writeUser {user, file, level, moves} = '"\(user)":\(file):"\(level)":\(moves)\n';
+writeUser {user, file, level, moves} = "\"\(user)\":\"\(file)\":\"\(level)\":\"\(moves)\"";
 
 writeUsers users = map writeUser users;
 
+// Handling of levels scores files
+//---------------------------------
+
+scoreRegexp = like "\"([^\"]+)\":\"([^\"]*)\":([0-9]+):([0-9]+)";
+
+readScore groups =
+	{
+		level = groups.[1], 
+		user = groups.[2], 
+		pushes = number groups.[3], 
+		moves = number groups.[4],
+	};
+
+readScores lines =
+	lines |> map (_ l = scoreRegexp l ()) |> filter (_ l = not empty? l) |> map readScore;
+
+writeScore {level, user, pushes, moves} = "\"\(level)\":\"\(user)\":\(pushes):\(moves)";
+
+writeScores scores = map writeScore scores;
+
 // General IO
 //------------
-readFileLines file = (openInFile file "UTF-8").lines ();
+import java.io.FileNotFoundException;
+readFileLines file = 
+	try
+		(openInFile file "UTF-8").lines ();
+	catch FileNotFoundException:
+		[]
+	yrt;
 writeFileLines file lines = 
 	withHandle (openOutFile file "UTF-8") (_ h = for lines h.writeln);
 
-{readFileLines, writeFileLines, readLevels, width, height, convert, readUsers}
+{
+	readFileLines, 
+	writeFileLines, 
+	readLevels, 
+	width, 
+	height, 
+	convert, 
+	readUsers, 
+	writeUsers,
+	readScores, 
+	writeScores
+}

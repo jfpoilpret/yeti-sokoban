@@ -1,0 +1,53 @@
+module console;
+
+import java.awt.Font;
+import java.awt.event.KeyEvent;
+import java.awt.event.KeyListener;
+import java.util.concurrent.LinkedBlockingQueue;
+import javax.swing.JFrame;
+import javax.swing.JTextArea;
+
+class Console extends JFrame, KeyListener
+	keys = new LinkedBlockingQueue(),
+	
+	number popKey() keys#take() unsafely_as number,
+	
+	void keyPressed(KeyEvent e) keys#put(e#getKeyCode()),
+	void keyReleased(KeyEvent e),
+	void keyTyped(KeyEvent e)
+end;
+
+typedef t_console =
+{
+	title is string -> (),
+	clear is () -> (),
+	print is list?<string> -> (),
+	getch is () -> number,
+	close is () -> ()
+};
+	
+console width height is number -> number -> t_console =
+	(mapLines lines = lines |> map (^ "\n") |> fold (^) "";
+	 line = (strPad " " width "") ^ "\n";
+	 content = [1..height] |> map \line |> mapLines;
+	 
+	 frame = new Console();
+	 frame#addKeyListener(frame);
+	 area = new JTextArea(height, width);
+	 area#setFont(new Font(Font#MONOSPACED, Font#PLAIN, 14));
+	 area#setEditable(false);
+	 area#addKeyListener(frame);
+	 frame#add(area);
+	 frame#setDefaultCloseOperation(JFrame#DISPOSE_ON_CLOSE);
+	 frame#pack();
+	 area#setText(content);
+	 frame#setVisible(true);
+	 {
+		 title t = frame#setTitle(t),
+		 clear () = area#setText(content),
+		 print lines = area#setText(mapLines lines),
+		 getch () = number (string frame#popKey()),
+		 close () = frame#dispose()
+	 });
+
+{console}
